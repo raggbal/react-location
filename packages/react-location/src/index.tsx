@@ -2082,3 +2082,74 @@ export function stringifySearchWith(stringify: (search: any) => string) {
     return searchStr ? `?${searchStr}` : ''
   }
 }
+
+
+/**
+ * It is used to prevent the calling element from rendering while the routeloader is running.
+ * If the return value of this hooks is false, insert a process that does not render.
+ */
+ export const useIsActiveRoute = ():boolean => {
+  const router = useRouter()
+  let myPath = router.state.location.pathname // my route path
+  let browserPath = window.location.pathname // browser's root path
+  return myPath === browserPath
+}
+
+/**
+ * The Data Loader runs the specified loader when there are changes in search parameters,
+ * params, and routeLoader results.
+ * @param loader
+ */
+export interface PromiseState<T> {
+  status: 'idle' | 'fulfilled' | 'rejected'
+  value: T | null
+  error: any
+  isLoading: boolean
+}
+interface PromiseInnerState<T> {
+  status: 'idle' | 'fulfilled' | 'rejected'
+  value: T | null
+  error: any
+}
+function usePromiseEffect<T>(effect: () => Promise<T>, deps: React.DependencyList):PromiseState<T> {
+  const [state, setState] = React.useState<PromiseInnerState<T>>({
+    status: 'idle',
+    value: null,
+    error: null,
+  })
+  const [isLoading, setIsLoading] = React.useState(false)
+
+  React.useEffect(() => {
+    setIsLoading(true)
+    effect()
+        .then((value) => {
+          setState({status: 'fulfilled', value, error: null})
+          setIsLoading(false)
+        })
+        .catch((error) => {
+          setState({ status: 'rejected', value: null, error })
+          setIsLoading(false)
+        })
+  }, deps)
+
+  return {
+    status: state.status,
+    value: state.value,
+    error: state.error,
+    isLoading: isLoading
+  }
+}
+
+export const useDataLoader = (loader:(search:any,params:any,data:any) => Promise<{load:any,search:any,params:any,data:any}>):PromiseState<{load:any,search:any,params:any,data:any}>  => {
+  const router = useRouter()
+  const pathname = router.state.location.pathname
+  const match = router.state.matches.find(v => v.pathname === pathname)
+  const search = router.state.location.search
+  const params = match!.params
+  const data = match!.data
+
+  return usePromiseEffect(async ()=>{
+    return  await loader(search,params,data)
+  },[search,params,data])
+}
+

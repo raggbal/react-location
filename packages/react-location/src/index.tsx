@@ -13,6 +13,7 @@ import {
 export { createHashHistory, createBrowserHistory, createMemoryHistory }
 
 import { decode, encode } from './qss'
+import {useErrorHandler} from "react-error-boundary";
 
 // Types
 
@@ -103,6 +104,9 @@ export type RouteLoaders<TGenerics> = {
   pendingElement?: SyncOrAsyncElement<TGenerics>
   // An asynchronous function responsible for preparing or fetching data for the route before it is rendered
   loader?: LoaderFn<TGenerics>
+
+  dataLoader?: (search:any,params:any,data:any) => Promise<{load:any,search:any,params:any,data:any}>
+
   // An asynchronous function responsible for cleaning up when the match cache is cleared. This is useful when
   // the loader function has side effects that need to be cleaned up when the match is no longer in use.
   unloader?: UnloaderFn<TGenerics>
@@ -343,7 +347,9 @@ class Subscribable {
     this.listeners = []
   }
 
+
   subscribe(listener: Listener): () => void {
+
     this.listeners.push(listener as Listener)
 
     return () => {
@@ -374,6 +380,7 @@ export class ReactLocation<
 
   constructor(options?: ReactLocationOptions) {
     super()
+    // window.alert("ddsdsds")
     this.history = options?.history || createDefaultHistory()
     this.stringifySearch = options?.stringifySearch ?? defaultStringifySearch
     this.parseSearch = options?.parseSearch ?? defaultParseSearch
@@ -485,6 +492,7 @@ export type MatchesProviderProps<TGenerics> = {
 export function MatchesProvider<TGenerics>(
   props: MatchesProviderProps<TGenerics>,
 ) {
+  console.log(props)
   return <MatchesContext.Provider {...props} />
 }
 
@@ -829,6 +837,7 @@ export class RouteMatch<TGenerics extends PartialGenerics = DefaultGenerics> {
   errorElement?: React.ReactNode
   pendingElement?: React.ReactNode
   error?: unknown
+  dataLoader?:(search:any,params:any,data:any) => Promise<{load:any,search:any,params:any,data:any}>
   loaderPromise?: Promise<UseGeneric<TGenerics, 'LoaderData'>>
   maxAge?: number
   matchLoader?: MatchLoader<TGenerics>
@@ -907,6 +916,8 @@ export class RouteMatch<TGenerics extends PartialGenerics = DefaultGenerics> {
       .then(() => {
         const elementPromises: Promise<void>[] = []
 
+        this.dataLoader = this.route.dataLoader
+        // window.alert(this.dataLoader)
         // For each element type, potentially load it asynchronously
         const elementTypes = [
           'element',
@@ -1592,7 +1603,16 @@ export function Outlet<TGenerics extends PartialGenerics = DefaultGenerics>() {
 
     const matchElement = match.element ?? router.defaultElement
 
-    return matchElement ?? <Outlet />
+    console.log("dataLoader",match.dataLoader)
+
+    // if (match.dataLoader) {
+      return <PreventWasteRender>
+        <DataLoader MyComponent={matchElement} MyLoader={match.dataLoader} />
+      </PreventWasteRender> ?? <Outlet />
+    // } else {
+    //   return matchElement ?? <Outlet />
+    // }
+
   })()
 
   return <MatchesProvider value={matches}>{element}</MatchesProvider>
@@ -2153,3 +2173,26 @@ export const useDataLoader = (loader:(search:any,params:any,data:any) => Promise
   },[search,params,data])
 }
 
+
+export function PreventWasteRender({children}:{children:React.ReactNode}) {
+  // 次のルートのローダーが動いている間、現実のルートのローダが動いてしまい、無駄なfetchなどが発行されてしまうのを防ぐ。
+  const isActive = useIsActiveRoute()
+  if (!isActive) {
+    return <></>
+  }
+  return (<>
+    {children}
+  </>)
+}
+
+export function DataLoader({MyComponent,MyLoader}:{MyComponent:any,MyLoader:any}) {
+  const handleError = useErrorHandler()
+  const {status, value,error,isLoading} = useDataLoader(MyLoader)
+  if (status !== "fulfilled") {
+    if (error) {
+      handleError(error)
+    }
+    return  (<></>)
+  }
+  return (<MyComponent {...value} />)
+}

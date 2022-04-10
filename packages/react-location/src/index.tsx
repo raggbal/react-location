@@ -105,7 +105,7 @@ export type RouteLoaders<TGenerics> = {
   // An asynchronous function responsible for preparing or fetching data for the route before it is rendered
   loader?: LoaderFn<TGenerics>
 
-  dataLoader?: (search:any,params:any,data:any) => Promise<{load:any,search:any,params:any,data:any}>
+  dataLoader?: (search:any,params:any,data:any) => Promise<any>
 
   // An asynchronous function responsible for cleaning up when the match cache is cleared. This is useful when
   // the loader function has side effects that need to be cleaned up when the match is no longer in use.
@@ -380,7 +380,6 @@ export class ReactLocation<
 
   constructor(options?: ReactLocationOptions) {
     super()
-    // window.alert("ddsdsds")
     this.history = options?.history || createDefaultHistory()
     this.stringifySearch = options?.stringifySearch ?? defaultStringifySearch
     this.parseSearch = options?.parseSearch ?? defaultParseSearch
@@ -837,7 +836,7 @@ export class RouteMatch<TGenerics extends PartialGenerics = DefaultGenerics> {
   errorElement?: React.ReactNode
   pendingElement?: React.ReactNode
   error?: unknown
-  dataLoader?:(search:any,params:any,data:any) => Promise<{load:any,search:any,params:any,data:any}>
+  dataLoader?:(search:any,params:any,data:any) => Promise<any>
   loaderPromise?: Promise<UseGeneric<TGenerics, 'LoaderData'>>
   maxAge?: number
   matchLoader?: MatchLoader<TGenerics>
@@ -917,7 +916,6 @@ export class RouteMatch<TGenerics extends PartialGenerics = DefaultGenerics> {
         const elementPromises: Promise<void>[] = []
 
         this.dataLoader = this.route.dataLoader
-        // window.alert(this.dataLoader)
         // For each element type, potentially load it asynchronously
         const elementTypes = [
           'element',
@@ -1605,13 +1603,13 @@ export function Outlet<TGenerics extends PartialGenerics = DefaultGenerics>() {
 
     console.log("dataLoader",match.dataLoader)
 
-    // if (match.dataLoader) {
+    if (match.dataLoader) {
       return <PreventWasteRender>
         <DataLoader MyComponent={matchElement} MyLoader={match.dataLoader} />
       </PreventWasteRender> ?? <Outlet />
-    // } else {
-    //   return matchElement ?? <Outlet />
-    // }
+    } else {
+      return matchElement ?? <Outlet />
+    }
 
   })()
 
@@ -2160,7 +2158,7 @@ function usePromiseEffect<T>(effect: () => Promise<T>, deps: React.DependencyLis
   }
 }
 
-export const useDataLoader = (loader:(search:any,params:any,data:any) => Promise<{load:any,search:any,params:any,data:any}>):PromiseState<{load:any,search:any,params:any,data:any}>  => {
+export const useDataLoader = (loader:(search:any,params:any,data:any) => Promise<any>):PromiseState<any>  => {
   const router = useRouter()
   const pathname = router.state.location.pathname
   const match = router.state.matches.find(v => v.pathname === pathname)
@@ -2190,9 +2188,18 @@ export function DataLoader({MyComponent,MyLoader}:{MyComponent:any,MyLoader:any}
   const {status, value,error,isLoading} = useDataLoader(MyLoader)
   if (status !== "fulfilled") {
     if (error) {
+      console.log("DataLoader error",error)
       handleError(error)
     }
     return  (<></>)
   }
-  return (<MyComponent {...value} />)
+  const dataProps = {
+    data: value
+  }
+  console.log("dataProps",dataProps)
+  // console.log("DataLoader MyComponent",value)
+  // const aa = React.cloneElement(MyComponent, {...value})
+  // return (<MyComponent {...value}/>)
+  // <child.type key={child.key || index} ref={child.ref} {...child.props} {...newProps}>
+  return (<MyComponent.type ref={MyComponent.ref} {...MyComponent.props} {...dataProps} />)
 }

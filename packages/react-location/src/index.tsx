@@ -2101,9 +2101,7 @@ export function stringifySearchWith(stringify: (search: any) => string) {
     return searchStr ? `?${searchStr}` : ''
   }
 }
-//
-// export type DataLoaderFn<TGenerics extends PartialGenerics = DefaultGenerics> =
-// (search:UseGeneric<TGenerics, 'Search'>,params:UseGeneric<TGenerics, 'Params'>,data:UseGeneric<TGenerics, 'LoaderData'>) => Promise<UseGeneric<TGenerics, 'DataLoaderData'>>
+
 
 export function createDataLoader<TGenerics extends PartialGenerics = DefaultGenerics>(
     loader: (

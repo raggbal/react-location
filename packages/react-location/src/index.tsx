@@ -26,6 +26,8 @@ export type DefaultGenerics = {
   Params: Params<string>
   Search: Search<unknown>
   RouteMeta: RouteMeta<unknown>
+  DataLoaderData: DataLoaderData<unknown>
+
 }
 
 export type PartialGenerics = Partial<DefaultGenerics>
@@ -36,11 +38,12 @@ export type Search<T> = Record<string, T>
 export type Params<T> = Record<string, T>
 export type LoaderData<T> = Record<string, T>
 export type RouteMeta<T> = Record<string, T>
+export type DataLoaderData<T> = Record<string, T>
 
 export type UseGeneric<
   TGenerics extends PartialGenerics,
   TGeneric extends keyof PartialGenerics,
-> = TGeneric extends 'LoaderData' | 'Search'
+> = TGeneric extends 'LoaderData' | 'Search' | 'DataLoaderData'
   ? Partial<Maybe<TGenerics[TGeneric], DefaultGenerics[TGeneric]>>
   : Maybe<TGenerics[TGeneric], DefaultGenerics[TGeneric]>
 
@@ -1604,9 +1607,7 @@ export function Outlet<TGenerics extends PartialGenerics = DefaultGenerics>() {
     console.log("dataLoader",match.dataLoader)
 
     if (match.dataLoader) {
-      return <PreventWasteRender>
-        <DataLoader MyComponent={matchElement} MyLoader={match.dataLoader} />
-      </PreventWasteRender> ?? <Outlet />
+      return <DataLoader MyComponent={matchElement} MyLoader={match.dataLoader} />?? <Outlet />
     } else {
       return matchElement ?? <Outlet />
     }
@@ -2102,14 +2103,16 @@ export function stringifySearchWith(stringify: (search: any) => string) {
 }
 
 
+
 /**
- * It is used to prevent the calling element from rendering while the routeloader is running.
- * If the return value of this hooks is false, insert a process that does not render.
+ * When react-location clicks Link, the data of the next route is read by routeLoader.
+ * While loading, if you are using useSearch or useRoute on the current route, it will react and re-render will run.
+ * To prevent that, you need to check with this hooks
  */
- export const useIsActiveRoute = ():boolean => {
+export const useIsActiveRoute = ():boolean => {
   const router = useRouter()
   let myPath = router.state.location.pathname // my route path
-  let browserPath = window.location.pathname // browser's root path
+  let browserPath = window.location.pathname  // browser's root path
   return myPath === browserPath
 }
 
@@ -2122,43 +2125,47 @@ export interface PromiseState<T> {
   status: 'idle' | 'fulfilled' | 'rejected'
   value: T | null
   error: any
-  isLoading: boolean
 }
 interface PromiseInnerState<T> {
   status: 'idle' | 'fulfilled' | 'rejected'
   value: T | null
   error: any
 }
-function usePromiseEffect<T>(effect: () => Promise<T>, deps: React.DependencyList):PromiseState<T> {
+function usePromiseEffect<T>(effect: () => Promise<T>, deps: React.DependencyList, enabled?:boolean):PromiseState<T> {
+  const deps2 = React.useMemo(()=>{
+    if (enabled !== undefined) {
+      return [...deps,enabled]
+    } else {
+      return deps
+    }
+  },[deps,enabled])
+
   const [state, setState] = React.useState<PromiseInnerState<T>>({
     status: 'idle',
     value: null,
     error: null,
   })
-  const [isLoading, setIsLoading] = React.useState(false)
 
   React.useEffect(() => {
-    setIsLoading(true)
+    if (!enabled) { return }
     effect()
         .then((value) => {
           setState({status: 'fulfilled', value, error: null})
-          setIsLoading(false)
         })
         .catch((error) => {
           setState({ status: 'rejected', value: null, error })
-          setIsLoading(false)
         })
-  }, deps)
+  }, deps2)
 
   return {
     status: state.status,
     value: state.value,
-    error: state.error,
-    isLoading: isLoading
+    error: state.error
   }
 }
 
 export const useDataLoader = (loader:(search:any,params:any,data:any) => Promise<any>):PromiseState<any>  => {
+  const enabled = useIsActiveRoute() // Required to trigger dataLoader only when path matches the current route.
   const router = useRouter()
   const pathname = router.state.location.pathname
   const match = router.state.matches.find(v => v.pathname === pathname)
@@ -2168,38 +2175,21 @@ export const useDataLoader = (loader:(search:any,params:any,data:any) => Promise
 
   return usePromiseEffect(async ()=>{
     return  await loader(search,params,data)
-  },[search,params,data])
+  },[search,params,data],enabled)
 }
 
-
-export function PreventWasteRender({children}:{children:React.ReactNode}) {
-  // 次のルートのローダーが動いている間、現実のルートのローダが動いてしまい、無駄なfetchなどが発行されてしまうのを防ぐ。
-  const isActive = useIsActiveRoute()
-  if (!isActive) {
-    return <></>
-  }
-  return (<>
-    {children}
-  </>)
-}
-
-export function DataLoader({MyComponent,MyLoader}:{MyComponent:any,MyLoader:any}) {
-  const handleError = useErrorHandler()
-  const {status, value,error,isLoading} = useDataLoader(MyLoader)
+export function DataLoader({MyComponent,MyLoader}:{MyComponent:any,MyLoader:(search:any,params:any,data:any) => Promise<any>}) {
+  const {status, value, error} = useDataLoader(MyLoader)
   if (status !== "fulfilled") {
     if (error) {
-      console.log("DataLoader error",error)
-      handleError(error)
+      throw error
     }
     return  (<></>)
   }
   const dataProps = {
-    data: value
+    data: value,
   }
-  console.log("dataProps",dataProps)
-  // console.log("DataLoader MyComponent",value)
-  // const aa = React.cloneElement(MyComponent, {...value})
-  // return (<MyComponent {...value}/>)
-  // <child.type key={child.key || index} ref={child.ref} {...child.props} {...newProps}>
-  return (<MyComponent.type ref={MyComponent.ref} {...MyComponent.props} {...dataProps} />)
+  // console.log("dataProps",dataProps)
+  // return (<MyComponent {...dataProps} />) // reactのバージョンの問題か？
+  return (<MyComponent.type ref={MyComponent.ref} {...MyComponent.props} {...dataProps} />) // react-locationに組み込む場合、こっちが成功する
 }

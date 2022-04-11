@@ -108,7 +108,7 @@ export type RouteLoaders<TGenerics> = {
   // An asynchronous function responsible for preparing or fetching data for the route before it is rendered
   loader?: LoaderFn<TGenerics>
 
-  dataLoader?: (search:any,params:any,data:any) => Promise<any>
+  dataLoader?: (search:UseGeneric<TGenerics, 'Search'>,params:UseGeneric<TGenerics, 'Params'>,data:UseGeneric<TGenerics, 'LoaderData'>) => Promise<UseGeneric<TGenerics, 'DataLoaderData'>>
 
   // An asynchronous function responsible for cleaning up when the match cache is cleared. This is useful when
   // the loader function has side effects that need to be cleaned up when the match is no longer in use.
@@ -839,7 +839,7 @@ export class RouteMatch<TGenerics extends PartialGenerics = DefaultGenerics> {
   errorElement?: React.ReactNode
   pendingElement?: React.ReactNode
   error?: unknown
-  dataLoader?:(search:any,params:any,data:any) => Promise<any>
+  dataLoader?:(search:UseGeneric<TGenerics, 'Search'>,params:UseGeneric<TGenerics, 'Params'>,data:UseGeneric<TGenerics, 'LoaderData'>) => Promise<UseGeneric<TGenerics, 'DataLoaderData'>>
   loaderPromise?: Promise<UseGeneric<TGenerics, 'LoaderData'>>
   maxAge?: number
   matchLoader?: MatchLoader<TGenerics>
@@ -2101,8 +2101,18 @@ export function stringifySearchWith(stringify: (search: any) => string) {
     return searchStr ? `?${searchStr}` : ''
   }
 }
+//
+// export type DataLoaderFn<TGenerics extends PartialGenerics = DefaultGenerics> =
+// (search:UseGeneric<TGenerics, 'Search'>,params:UseGeneric<TGenerics, 'Params'>,data:UseGeneric<TGenerics, 'LoaderData'>) => Promise<UseGeneric<TGenerics, 'DataLoaderData'>>
 
-
+export function createDataLoader<TGenerics extends PartialGenerics = DefaultGenerics>(
+    loader: (
+        search: UseGeneric<TGenerics, 'Search'>,
+        params: UseGeneric<TGenerics, 'Params'>,
+        data: UseGeneric<TGenerics, 'LoaderData'>,
+    ) => Promise<UseGeneric<TGenerics, 'DataLoaderData'>>) {
+    return loader
+}
 
 /**
  * When react-location clicks Link, the data of the next route is read by routeLoader.

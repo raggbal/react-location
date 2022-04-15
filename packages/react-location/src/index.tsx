@@ -14,6 +14,7 @@ export { createHashHistory, createBrowserHistory, createMemoryHistory }
 
 import { decode, encode } from './qss'
 import {useErrorHandler} from "react-error-boundary";
+import {useCallback, useState} from "react";
 
 // Types
 
@@ -46,6 +47,7 @@ export type UseGeneric<
 > = TGeneric extends 'LoaderData' | 'Search' | 'DataLoaderData'
   ? Partial<Maybe<TGenerics[TGeneric], DefaultGenerics[TGeneric]>>
   : Maybe<TGenerics[TGeneric], DefaultGenerics[TGeneric]>
+
 
 export type ReactLocationOptions = {
   // The history object to be used internally by react-location
@@ -2139,14 +2141,17 @@ interface PromiseInnerState<T> {
   value: T | null
   error: any
 }
-function usePromiseEffect<T>(effect: () => Promise<T>, deps: React.DependencyList, enabled?:boolean):PromiseState<T> {
+function usePromiseEffect<T>(effect: () => Promise<T>, deps: React.DependencyList, enabled?:boolean, reload?:boolean):PromiseState<T> {
   const deps2 = React.useMemo(()=>{
+    let dd:React.DependencyList = [...deps]
     if (enabled !== undefined) {
-      return [...deps,enabled]
-    } else {
-      return deps
+      dd = [...dd,enabled]
     }
-  },[deps,enabled])
+    if (reload !== undefined) {
+      dd = [...dd,reload]
+    }
+    return dd
+  },[deps,enabled,reload])
 
   const [state, setState] = React.useState<PromiseInnerState<T>>({
     status: 'idle',
@@ -2172,7 +2177,7 @@ function usePromiseEffect<T>(effect: () => Promise<T>, deps: React.DependencyLis
   }
 }
 
-export const useDataLoader = (loader:(search:any,params:any,data:any) => Promise<any>):PromiseState<any>  => {
+export const useDataLoader = (loader:(search:any,params:any,data:any) => Promise<any>,reload:boolean):PromiseState<any>  => {
   const enabled = useIsActiveRoute() // Required to trigger dataLoader only when path matches the current route.
   const router = useRouter()
   const pathname = router.state.location.pathname
@@ -2183,11 +2188,17 @@ export const useDataLoader = (loader:(search:any,params:any,data:any) => Promise
 
   return usePromiseEffect(async ()=>{
     return  await loader(search,params,data)
-  },[search,params,data],enabled)
+  },[search,params,data],enabled,reload)
 }
 
 export function DataLoader({MyComponent,MyLoader}:{MyComponent:any,MyLoader:(search:any,params:any,data:any) => Promise<any>}) {
-  const {status, value, error} = useDataLoader(MyLoader)
+  // for reload
+  const [reload,setReload] = useState(false)
+  const reloadMethod = useCallback(()=>{
+    setReload(v => !v)
+  },[])
+
+  const {status, value, error} = useDataLoader(MyLoader,reload)
   if (status !== "fulfilled") {
     if (error) {
       throw error
@@ -2196,8 +2207,26 @@ export function DataLoader({MyComponent,MyLoader}:{MyComponent:any,MyLoader:(sea
   }
   const dataProps = {
     data: value,
+    reload: reloadMethod
   }
-  // console.log("dataProps",dataProps)
+  
   // return (<MyComponent {...dataProps} />) // reactのバージョンの問題か？
   return (<MyComponent.type ref={MyComponent.ref} {...MyComponent.props} {...dataProps} />) // react-locationに組み込む場合、こっちが成功する
 }
+
+export interface LoaderPageProps<TGenerics extends PartialGenerics = DefaultGenerics> {
+  data :UseGenericSimple<TGenerics, 'DataLoaderData'>,
+  reload: ()=>void  | any
+}
+
+export function withPage<TGenerics extends PartialGenerics = DefaultGenerics>(MyComponent:React.FunctionComponent<LoaderPageProps<TGenerics>>) {
+  return function (props:{data?:any,reload?:any}) {
+    // @ts-ignore
+    return (<MyComponent {...props} />)
+  }
+}
+
+export type UseGenericSimple<
+    TGenerics extends PartialGenerics,
+    TGeneric extends keyof PartialGenerics,
+    > = TGenerics[TGeneric]
